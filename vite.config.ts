@@ -12,7 +12,8 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     outDir: "dist",
-    assetsDir: "assets",
+    // Don't specify assetsDir to avoid nesting in /assets/assets
+    assetsDir: "",  
     sourcemap: true,
     // Ensure we generate a clean build
     emptyOutDir: true,
@@ -22,6 +23,10 @@ export default defineConfig(({ mode }) => ({
         manualChunks: {
           vendor: ['react', 'react-dom'],
         },
+        // Ensure consistnet file naming
+        entryFileNames: 'assets/[name].[hash].js',
+        chunkFileNames: 'assets/[name].[hash].js',
+        assetFileNames: 'assets/[name].[hash].[ext]',
       },
     },
   },
