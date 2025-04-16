@@ -1,6 +1,6 @@
-
 // Import our model check utility
 import { checkModelAvailability } from './modelCheck';
+import { FilesetResolver, LlmInference } from "@mediapipe/tasks-genai";
 
 let llmInference = null;
 
@@ -14,29 +14,31 @@ export const initializeLLM = async () => {
     
     console.log('Initializing LLM...');
     // Check if the FilesetResolver is available
-    if (!window.FilesetResolver) {
-      console.error('FilesetResolver not found in window object. Make sure the genai_bundle.js script is properly loaded.');
-      return false;
-    }
+    // if (!window.FilesetResolver) {
+    //   console.error('FilesetResolver not found in window object. Make sure the genai_bundle.js script is properly loaded.');
+    //   return false;
+    // }
     
     try {
       console.log('Attempting to initialize FilesetResolver...');
-      const genai = await window.FilesetResolver.forGenAiTasks(
+      // const genai = await window.FilesetResolver.forGenAiTasks(
+      const genai = await FilesetResolver.forGenAiTasks(
         "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-genai@latest/wasm"
       );
       
       console.log('FilesetResolver initialized, creating LLM inference...');
       
-      if (!window.LlmInference) {
-        console.error('LlmInference not found in window object.');
-        return false;
-      }
+      // if (!window.LlmInference) {
+      //   console.error('LlmInference not found in window object.');
+      //   return false;
+      // }
       
-      llmInference = await window.LlmInference.createFromOptions(genai, {
+      // llmInference = await window.LlmInference.createFromOptions(genai, {
+      llmInference = await LlmInference.createFromOptions(genai, {
         baseOptions: {
           modelAssetPath: '/assets/gemma3-1b-it-int4.task'
         },
-        maxTokens: 1000,
+        maxTokens: 600,
         topK: 40,
         temperature: 0.8,
         randomSeed: 101
@@ -65,45 +67,44 @@ const generatePrompt = (messages, contextData) => {
   if (contextData) {
     if (contextData.sensorReadings && contextData.sensorReadings.length > 0) {
       const latestReading = contextData.sensorReadings[contextData.sensorReadings.length - 1];
-      contextString += `\nCurrent sensor data:\n`;
+      // Add clear label for current data
+      contextString += `\nCURRENT SENSOR DATA:\n`; 
       contextString += `- Servo Motor: Voltage ${latestReading.servoMotorVoltage.toFixed(2)}V, Speed ${latestReading.servoMotorSpeed.toFixed(0)} RPM, Vibration ${latestReading.servoMotorVibration.toFixed(2)} mm/s\n`;
       contextString += `- Tooling: Vibration ${latestReading.toolingVibration.toFixed(2)} mm/s, Wear Level ${latestReading.toolWearLevel.toFixed(1)}%\n`;
       contextString += `- Coolant: Supply ${latestReading.toolCoolantSupplyLevel.toFixed(1)}%, Reservoir ${latestReading.coolantReservoirLevel.toFixed(1)}%, Flow Rate ${latestReading.coolantFlowRate.toFixed(1)} L/min\n`;
       contextString += `- Base Plate: Pressure ${latestReading.basePlatePressure.toFixed(1)} psi, Vibration ${latestReading.basePlateVibration.toFixed(2)} mm/s\n`;
     }
     
-    if (contextData.insights && contextData.insights.length > 0) {
-      contextString += `\nCurrent insights:\n`;
-      contextData.insights.forEach(insight => {
-        contextString += `- ${insight.title}: ${insight.description}\n`;
-      });
-    }
+    // Add static historical context for the demo with clear label
+    // Add clear label for historical data
+    contextString += `\nHISTORICAL NOTES:\n`;
+    contextString += `- The last recorded issue was elevated tooling vibration (3.5 mm/s) yesterday afternoon.\n`;
+
+    // if (contextData.insights && contextData.insights.length > 0) {
+    //   // Keep insights minimal for this simpler prompt
+    //   contextString += `\nSYSTEM INSIGHTS:\n`; 
+    //   contextData.insights.slice(0, 1).forEach(insight => { // Limit insights shown
+    //     contextString += `- ${insight.title}: ${insight.description}\n`;
+    //   });
+    // }
     
-    if (contextData.selectedPart) {
-      const part = contextData.selectedPart;
-      contextString += `\nSelected part: ${part.name} (ID: ${part.id})\n`;
-      contextString += `- Material: ${part.material}\n`;
-      contextString += `- Last machined: ${part.lastMachined.toDateString()}\n`;
-      contextString += `- Operation time: ${part.operationTime} minutes\n`;
-    }
+    // if (contextData.selectedPart) {
+    //   const part = contextData.selectedPart;
+    //   contextString += `\nSelected part: ${part.name} (ID: ${part.id})\n`;
+    //   contextString += `- Material: ${part.material}\n`;
+    //   contextString += `- Last machined: ${part.lastMachined.toDateString()}\n`;
+    //   contextString += `- Operation time: ${part.operationTime} minutes\n`;
+    // }
   }
   
-  // Combine everything into a prompt
-  const prompt = `You are the CNC Insight Navigator assistant. You help technicians analyze CNC machining operations and diagnose issues.
-  
+  // Combine everything into a simpler prompt
+  const prompt = `You are a helpful CNC machine assistant.
+Context:
 ${contextString}
+User Question: ${userMessage}
 
-Given the context above, provide a clear and concise response to the user's message. Highlight any important areas to examine or actions to take.
-
-User's message: ${userMessage}
-
-When responding:
-1. Highlight any anomalies or critical values that need attention
-2. Provide specific recommendations for addressing issues
-3. Reference specific sensor readings when relevant
-4. Use technical but accessible language
-
-Your response:`;
+Answer the user's question directly using only the information from the 'Context' above. Be concise, WITHIN ONE SENTENCE.
+Answer:`;
 
   console.log('Generated prompt:', prompt);
   return prompt;
