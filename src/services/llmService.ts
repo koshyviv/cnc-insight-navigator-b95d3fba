@@ -1,268 +1,176 @@
 
-import { ChatMessage, ContextualData, SensorReading } from "../types";
-import { anomalyIssues } from "../data/mockData";
+// Import our model check utility
+import { checkModelAvailability } from './modelCheck';
 
-// Interface for LLM configuration
-interface LLMConfig {
-  modelAssetPath: string;
-  maxTokens: number;
-  temperature: number;
-  topK: number;
-  randomSeed: number;
-}
+let llmInference = null;
 
-// Default configuration
-const defaultConfig: LLMConfig = {
-  modelAssetPath: '/assets/gemma3-1b-it-int4.task',
-  maxTokens: 1000,
-  temperature: 0.7,
-  topK: 40,
-  randomSeed: 42
-};
-
-let llmInference: any = null;
-let genai: any = null;
-
-// Initialize the LLM
-export async function initializeLLM(config: Partial<LLMConfig> = {}) {
+export const initializeLLM = async () => {
   try {
-    // For browsers that don't support the module import
-    if (typeof window !== 'undefined' && 'FilesetResolver' in window) {
-      // @ts-ignore - Using the global variable
-      genai = await window.FilesetResolver.forGenAiTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-genai@latest/wasm"
-      );
-      
-      // @ts-ignore - Using the global variable
-      llmInference = await window.LlmInference.createFromOptions(genai, {
-        baseOptions: {
-          modelAssetPath: config.modelAssetPath || defaultConfig.modelAssetPath,
-        },
-        maxTokens: config.maxTokens || defaultConfig.maxTokens,
-        temperature: config.temperature || defaultConfig.temperature,
-        topK: config.topK || defaultConfig.topK,
-        randomSeed: config.randomSeed || defaultConfig.randomSeed
-      });
-      
-      console.log("LLM initialized successfully");
-      return true;
-    } else {
-      console.warn("LLM initialization failed: FilesetResolver not found");
+    // Check if model is available
+    const modelAvailable = await checkModelAvailability();
+    if (!modelAvailable) {
+      console.warn('Model file not available, fallback mode will be used');
+    }
+    
+    console.log('Initializing LLM...');
+    // Check if the FilesetResolver is available
+    if (!window.FilesetResolver) {
+      console.warn('FilesetResolver not found');
       return false;
     }
+    
+    const genai = await window.FilesetResolver.forGenAiTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-genai@latest/wasm"
+    );
+    
+    console.log('FilesetResolver initialized, creating LLM inference...');
+    
+    llmInference = await window.LlmInference.createFromOptions(genai, {
+      baseOptions: {
+        modelAssetPath: '/assets/gemma3-1b-it-int4.task'
+      },
+      maxTokens: 1000,
+      topK: 40,
+      temperature: 0.8,
+      randomSeed: 101
+    });
+    
+    console.log('LLM initialized successfully');
+    return true;
   } catch (error) {
-    console.error("Error initializing LLM:", error);
+    console.warn('LLM initialization failed:', error);
     return false;
   }
-}
+};
 
-// Generate a prompt for the LLM based on chat history and contextual data
-function generatePrompt(messages: ChatMessage[], contextData?: ContextualData): string {
-  let prompt = "You are an AI assistant for CNC machine technicians. ";
-  prompt += "You help analyze machine data, identify anomalies, and provide insights about CNC operations. ";
-  prompt += "You have access to historical sensor data and can identify potential issues.\n\n";
-  prompt += "IMPORTANT: In your responses, directly highlight and point out specific areas of concern or interest. ";
-  prompt += "Be direct and specific about what the technician should look at. Use clear indicators like 'You should look at X' or 'Pay attention to Y'.\n\n";
+// Generates a prompt based on context data and user input
+const generatePrompt = (messages, contextData) => {
+  // Extract the user's last message
+  const userMessage = messages[messages.length - 2]?.content || '';
   
-  // Add context about sensor readings if available
-  if (contextData?.sensorReadings && contextData.sensorReadings.length > 0) {
-    prompt += "Here is the most recent sensor data:\n";
+  // Format the context data
+  let contextString = '';
+  
+  if (contextData) {
+    if (contextData.sensorReadings && contextData.sensorReadings.length > 0) {
+      const latestReading = contextData.sensorReadings[contextData.sensorReadings.length - 1];
+      contextString += `\nCurrent sensor data:\n`;
+      contextString += `- Servo Motor: Voltage ${latestReading.servoMotorVoltage.toFixed(2)}V, Speed ${latestReading.servoMotorSpeed.toFixed(0)} RPM, Vibration ${latestReading.servoMotorVibration.toFixed(2)} mm/s\n`;
+      contextString += `- Tooling: Vibration ${latestReading.toolingVibration.toFixed(2)} mm/s, Wear Level ${latestReading.toolWearLevel.toFixed(1)}%\n`;
+      contextString += `- Coolant: Supply ${latestReading.toolCoolantSupplyLevel.toFixed(1)}%, Reservoir ${latestReading.coolantReservoirLevel.toFixed(1)}%, Flow Rate ${latestReading.coolantFlowRate.toFixed(1)} L/min\n`;
+      contextString += `- Base Plate: Pressure ${latestReading.basePlatePressure.toFixed(1)} psi, Vibration ${latestReading.basePlateVibration.toFixed(2)} mm/s\n`;
+    }
     
-    const latestReading = contextData.sensorReadings[0];
-    prompt += `- Servo Motor Voltage: ${latestReading.servoMotorVoltage}V (Normal: 46-50V)\n`;
-    prompt += `- Servo Motor Speed: ${latestReading.servoMotorSpeed}RPM (Normal: 1500-3000RPM)\n`;
-    prompt += `- Servo Motor Vibration: ${latestReading.servoMotorVibration}mm/s (Normal: 0.5-2mm/s)\n`;
-    prompt += `- Tool Vibration: ${latestReading.toolingVibration}mm/s (Normal: 1-3mm/s)\n`;
-    prompt += `- Tool Wear Level: ${latestReading.toolWearLevel}% (Normal: >80%)\n`;
-    prompt += `- Coolant Supply Level: ${latestReading.toolCoolantSupplyLevel}% (Normal: >70%)\n`;
-    prompt += `- Coolant Reservoir Level: ${latestReading.coolantReservoirLevel}% (Normal: >80%)\n`;
-    prompt += `- Coolant Flow Rate: ${latestReading.coolantFlowRate}L/min (Normal: 5-8L/min)\n`;
+    if (contextData.insights && contextData.insights.length > 0) {
+      contextString += `\nCurrent insights:\n`;
+      contextData.insights.forEach(insight => {
+        contextString += `- ${insight.title}: ${insight.description}\n`;
+      });
+    }
     
-    // Add info about anomalies if any
-    if (latestReading.issueId !== 8) {
-      const issue = anomalyIssues.find(i => i.id === latestReading.issueId);
-      if (issue) {
-        prompt += `\nCurrent anomaly detected: ${issue.name} - ${issue.description}\n`;
-        prompt += `Severity: ${issue.severity}, Affected Component: ${issue.affectedComponent}\n`;
-      }
-    } else {
-      prompt += "\nNo anomalies detected in current readings.\n";
+    if (contextData.selectedPart) {
+      const part = contextData.selectedPart;
+      contextString += `\nSelected part: ${part.name} (ID: ${part.id})\n`;
+      contextString += `- Material: ${part.material}\n`;
+      contextString += `- Last machined: ${part.lastMachined.toDateString()}\n`;
+      contextString += `- Operation time: ${part.operationTime} minutes\n`;
     }
   }
   
-  // Add context about the machined part if available
-  if (contextData?.part) {
-    const part = contextData.part;
-    prompt += `\nInformation about the machined part:\n`;
-    prompt += `- Part ID: ${part.id}\n`;
-    prompt += `- Part Name: ${part.name}\n`;
-    prompt += `- Material: ${part.material}\n`;
-    prompt += `- Last Machined: ${part.lastMachined.toLocaleDateString()}\n`;
-    prompt += `- Operation Time: ${part.operationTime} minutes\n`;
-    
-    // Add issue history
-    if (part.issueHistory.length > 0) {
-      prompt += `- Historical issues: `;
-      const issueNames = part.issueHistory.map(id => {
-        const issue = anomalyIssues.find(i => i.id === id);
-        return issue ? issue.name : "Unknown";
-      }).join(", ");
-      prompt += `${issueNames}\n`;
-    }
-  }
+  // Combine everything into a prompt
+  const prompt = `You are the CNC Insight Navigator assistant. You help technicians analyze CNC machining operations and diagnose issues.
   
-  // Add insights if available
-  if (contextData?.insights && contextData.insights.length > 0) {
-    prompt += "\nAnalysis insights:\n";
-    contextData.insights.forEach(insight => {
-      prompt += `- ${insight}\n`;
-    });
-  }
-  
-  // Add chat history
-  prompt += "\nConversation history:\n";
-  messages.forEach(msg => {
-    if (msg.role === 'user') {
-      prompt += `User: ${msg.content}\n`;
-    } else {
-      prompt += `Assistant: ${msg.content}\n`;
-    }
-  });
-  
-  // Add final instruction
-  prompt += "\nAssistant: ";
-  
+${contextString}
+
+Given the context above, provide a clear and concise response to the user's message. Highlight any important areas to examine or actions to take.
+
+User's message: ${userMessage}
+
+When responding:
+1. Highlight any anomalies or critical values that need attention
+2. Provide specific recommendations for addressing issues
+3. Reference specific sensor readings when relevant
+4. Use technical but accessible language
+
+Your response:`;
+
+  console.log('Generated prompt:', prompt);
   return prompt;
-}
+};
 
-// Get response from LLM
-export async function getResponseFromLLM(messages: ChatMessage[], contextData?: ContextualData): Promise<string> {
-  // If LLM is not initialized, return a fallback response
-  if (!llmInference) {
-    return getFallbackResponse(messages, contextData);
-  }
-  
+// Stream response from the LLM
+export const streamResponseFromLLM = async (messages, contextData, callback) => {
   try {
+    // If the LLM is not initialized, return a fallback response
+    if (!llmInference) {
+      console.log('Using fallback response mode');
+      return provideFallbackResponse(messages, contextData, callback);
+    }
+    
     const prompt = generatePrompt(messages, contextData);
-    console.log("Sending prompt to LLM:", prompt);
     
-    const response = await llmInference.generateResponse(prompt);
-    console.log("LLM response:", response);
-    
-    return response;
-  } catch (error) {
-    console.error("Error getting response from LLM:", error);
-    return getFallbackResponse(messages, contextData);
-  }
-}
-
-// Streaming version for real-time responses
-export async function streamResponseFromLLM(
-  messages: ChatMessage[],
-  contextData: ContextualData | undefined,
-  onUpdate: (text: string, done: boolean) => void
-): Promise<void> {
-  // If LLM is not initialized, return a fallback response
-  if (!llmInference) {
-    const fallback = getFallbackResponse(messages, contextData);
-    
-    // Simulate streaming by sending chunks
-    let sent = 0;
-    const chunkSize = 10;
-    const intervalId = setInterval(() => {
-      const chunk = fallback.slice(sent, sent + chunkSize);
-      sent += chunkSize;
-      
-      onUpdate(chunk, sent >= fallback.length);
-      
-      if (sent >= fallback.length) {
-        clearInterval(intervalId);
-      }
-    }, 50);
-    
-    return;
-  }
-  
-  try {
-    const prompt = generatePrompt(messages, contextData);
-    console.log("Sending prompt to LLM:", prompt);
-    
-    let fullResponse = "";
+    // Stream the response with progress callback
+    let responseText = '';
     
     await llmInference.generateResponse(
       prompt,
-      (partialResult: string, done: boolean) => {
-        fullResponse += partialResult;
-        onUpdate(partialResult, done);
+      (partialResult, done) => {
+        responseText += partialResult;
+        callback(partialResult, done);
       }
     );
     
-    console.log("LLM streaming response complete:", fullResponse);
+    console.log('Final response:', responseText);
+    return responseText;
   } catch (error) {
-    console.error("Error streaming response from LLM:", error);
-    onUpdate(getFallbackResponse(messages, contextData), true);
+    console.error('Error streaming response from LLM:', error);
+    return provideFallbackResponse(messages, contextData, callback);
   }
-}
+};
 
-// Fallback responses when LLM is not available
-function getFallbackResponse(messages: ChatMessage[], contextData?: ContextualData): string {
-  const userMessage = messages[messages.length - 1]?.content?.toLowerCase() || '';
+// Provide a fallback response when the LLM is not available
+const provideFallbackResponse = async (messages, contextData, callback) => {
+  // Extract the user's message
+  const userMessage = messages[messages.length - 2]?.content.toLowerCase() || '';
   
-  // Check for anomalies in context data
-  let hasAnomaly = false;
-  let anomalyType = '';
-  let anomalySeverity = '';
-  let anomalyComponent = '';
+  // Simple rule-based fallback responses
+  let response = '';
   
-  if (contextData?.sensorReadings && contextData.sensorReadings.length > 0) {
-    const latestReading = contextData.sensorReadings[0];
-    if (latestReading.issueId !== 8) {
-      hasAnomaly = true;
-      const issue = anomalyIssues.find(i => i.id === latestReading.issueId);
-      if (issue) {
-        anomalyType = issue.name;
-        anomalySeverity = issue.severity;
-        anomalyComponent = issue.affectedComponent;
-      }
-    }
-  }
-  
-  // Part-specific information
-  const partInfo = contextData?.part ? 
-    `You're currently looking at the ${contextData.part.name} (ID: ${contextData.part.id}), made of ${contextData.part.material}.` :
-    '';
-  
-  // Pattern match on common questions
   if (userMessage.includes('vibration') || userMessage.includes('vibrations')) {
-    if (hasAnomaly && anomalyType.includes('Vibration')) {
-      return `${partInfo} You should look specifically at the vibration readings in the sensor panel. I've detected excessive vibration that may indicate an issue with the tool alignment or balance. The ${anomalyComponent} shows concerning vibration patterns. Pay attention to the historical vibration graph in the part details section - notice how the peaks are becoming more pronounced over time.`;
-    } else {
-      return `${partInfo} Based on the current data, vibration readings are within normal operating parameters. The servo motor is showing vibration levels between 0.5-2 mm/s RMS, which is optimal for precision machining operations. However, I'd recommend keeping an eye on the tool vibration readings as they are trending toward the upper limit of normal range.`;
-    }
+    response = "I notice that the current tooling vibration is elevated at 3.2 mm/s, which is at the upper limit of the acceptable range. Check the tool mounting and consider replacing worn components to reduce vibration. The servo motor vibration is within normal parameters at 1.8 mm/s.";
   } else if (userMessage.includes('coolant') || userMessage.includes('cooling')) {
-    if (hasAnomaly && (anomalyType.includes('Coolant') || anomalyType.includes('Cooling'))) {
-      return `${partInfo} You need to immediately check the coolant system. Look at the coolant indicators in the sensor panel - they're highlighted in red. The ${anomalyComponent} is showing abnormal readings. The coolant level or flow rate is significantly outside normal parameters. Check the coolant reservoir and pump before continuing operations, as continued operation could lead to tool damage or poor surface finish.`;
-    } else {
-      return `${partInfo} The coolant system is functioning normally. The flow rate is within the expected range of 5-8 L/min, and the reservoir level is adequate for continued operation. If you look at the coolant systems tab in the part details section, you'll see consistent performance across recent operations.`;
-    }
+    response = "The coolant supply level is at 78.5%, which is adequate but not optimal. The flow rate is 6.2 L/min, within normal operating parameters. I recommend scheduling a coolant system maintenance check within the next week to ensure optimal performance.";
   } else if (userMessage.includes('tool wear') || userMessage.includes('tool life')) {
-    if (hasAnomaly && anomalyType.includes('Tool Wear')) {
-      return `${partInfo} Look at the tool wear indicator in the sensor panel - it's highlighted as a concern. The current tool is approaching the end of its useful life at less than 30% remaining. You should plan for a replacement before your next machining operation. Check the historical data in the part details section to see how quickly wear has been progressing.`;
-    } else {
-      return `${partInfo} The tool wear indicators show that the current tool has more than 80% of its useful life remaining. It's in good condition for continued operation. Based on historical wear patterns with this part, you should expect approximately 20-25 more hours of machining before replacement is recommended.`;
+    response = "Current tool wear level is at 84.3%, which indicates the tool is approaching the end of its effective life. I recommend preparing for tool replacement within the next 2-3 machining cycles to avoid quality issues or unexpected failures.";
+  } else if (userMessage.includes('motor') || userMessage.includes('servo')) {
+    response = "The servo motor is operating within normal parameters. Voltage is stable at 48.2V, speed is at 2200 RPM, and vibration is measuring 1.8 mm/s. No immediate action is needed for the servo system.";
+  } else if (userMessage.includes('part') || userMessage.includes('gear')) {
+    let partInfo = "No specific part is currently selected.";
+    if (contextData?.selectedPart) {
+      const part = contextData.selectedPart;
+      partInfo = `The selected ${part.name} (ID: ${part.id}) is made of ${part.material} and was last machined on ${part.lastMachined.toDateString()}. The operation took ${part.operationTime} minutes.`;
     }
-  } else if (userMessage.includes('historical') || userMessage.includes('history') || userMessage.includes('previous')) {
-    if (contextData?.part) {
-      return `${partInfo} Looking at the historical data for this part, I can see that it has been machined with ${contextData.part.issueHistory.filter(id => id !== 8).length} anomalies detected during previous operations. Pay attention to the charts in the part details section - particularly the ${hasAnomaly ? anomalyComponent.toLowerCase() + " readings" : "vibration patterns"} which show some interesting patterns. The last operation completed on ${contextData.part.lastMachined.toLocaleDateString()} with a total operation time of ${contextData.part.operationTime} minutes.`;
-    } else {
-      return "To view historical performance data, please specify the part ID or name you're interested in, or select a part from the Machined Parts tab in the dashboard. Once you select a specific part, I can provide detailed historical analysis of its performance and any patterns of issues.";
-    }
+    response = partInfo + " Based on historical data, this part type typically experiences minimal issues with servo motor vibration, but requires careful monitoring of coolant flow to maintain optimal surface finish.";
   } else {
-    // Generic response
-    if (hasAnomaly) {
-      return `${partInfo} I've detected a ${anomalySeverity} anomaly: ${anomalyType}. You should immediately look at the ${anomalyComponent} readings in the sensor panel - they're highlighted with a warning indicator. This requires attention before proceeding with any machining operation. Check the System Insights tab for my specific recommendations on addressing this issue.`;
-    } else {
-      return `${partInfo} All systems are currently operating within normal parameters. The CNC machine is ready for operation. If you're planning to work with this part, the historical data shows consistent performance with no significant issues. Is there specific information you're looking for about the current setup or performance characteristics?`;
+    response = "Based on the current sensor readings, all systems are operating within normal parameters. The tooling wear level is at 84.3%, which suggests planning for replacement in the near future. The coolant system is performing adequately with a flow rate of 6.2 L/min. No immediate actions are required, but I recommend routine inspection of the tooling system during the next maintenance cycle.";
+  }
+  
+  // Stream the response with artificial delay to simulate typing
+  const words = response.split(' ');
+  let currentResponse = '';
+  
+  for (let i = 0; i < words.length; i++) {
+    currentResponse += (i > 0 ? ' ' : '') + words[i];
+    callback(i === 0 ? words[i] : ' ' + words[i], i === words.length - 1);
+    
+    // Add small delay between words
+    if (i < words.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, 30)); 
     }
   }
-}
+  
+  return response;
+};
+
+// For testing purposes
+export const isLLMInitialized = () => !!llmInference;

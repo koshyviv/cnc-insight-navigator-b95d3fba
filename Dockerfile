@@ -19,8 +19,7 @@ FROM nginx:alpine
 # Copy built assets from the build stage
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Copy model file to assets directory
-RUN mkdir -p /usr/share/nginx/html/assets
+# Create assets directory and copy model file
 COPY --from=build /app/public/assets /usr/share/nginx/html/assets
 
 # Add nginx configuration

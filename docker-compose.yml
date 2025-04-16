@@ -9,3 +9,11 @@ services:
       - "8080:80"
     volumes:
       - ./public/assets:/usr/share/nginx/html/assets
+    environment:
+      - NODE_ENV=production
+    # Add logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
