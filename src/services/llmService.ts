@@ -61,6 +61,8 @@ function generatePrompt(messages: ChatMessage[], contextData?: ContextualData): 
   let prompt = "You are an AI assistant for CNC machine technicians. ";
   prompt += "You help analyze machine data, identify anomalies, and provide insights about CNC operations. ";
   prompt += "You have access to historical sensor data and can identify potential issues.\n\n";
+  prompt += "IMPORTANT: In your responses, directly highlight and point out specific areas of concern or interest. ";
+  prompt += "Be direct and specific about what the technician should look at. Use clear indicators like 'You should look at X' or 'Pay attention to Y'.\n\n";
   
   // Add context about sensor readings if available
   if (contextData?.sensorReadings && contextData.sensorReadings.length > 0) {
@@ -72,12 +74,16 @@ function generatePrompt(messages: ChatMessage[], contextData?: ContextualData): 
     prompt += `- Servo Motor Vibration: ${latestReading.servoMotorVibration}mm/s (Normal: 0.5-2mm/s)\n`;
     prompt += `- Tool Vibration: ${latestReading.toolingVibration}mm/s (Normal: 1-3mm/s)\n`;
     prompt += `- Tool Wear Level: ${latestReading.toolWearLevel}% (Normal: >80%)\n`;
+    prompt += `- Coolant Supply Level: ${latestReading.toolCoolantSupplyLevel}% (Normal: >70%)\n`;
+    prompt += `- Coolant Reservoir Level: ${latestReading.coolantReservoirLevel}% (Normal: >80%)\n`;
+    prompt += `- Coolant Flow Rate: ${latestReading.coolantFlowRate}L/min (Normal: 5-8L/min)\n`;
     
     // Add info about anomalies if any
     if (latestReading.issueId !== 8) {
       const issue = anomalyIssues.find(i => i.id === latestReading.issueId);
       if (issue) {
         prompt += `\nCurrent anomaly detected: ${issue.name} - ${issue.description}\n`;
+        prompt += `Severity: ${issue.severity}, Affected Component: ${issue.affectedComponent}\n`;
       }
     } else {
       prompt += "\nNo anomalies detected in current readings.\n";
@@ -205,47 +211,58 @@ function getFallbackResponse(messages: ChatMessage[], contextData?: ContextualDa
   // Check for anomalies in context data
   let hasAnomaly = false;
   let anomalyType = '';
+  let anomalySeverity = '';
+  let anomalyComponent = '';
   
   if (contextData?.sensorReadings && contextData.sensorReadings.length > 0) {
     const latestReading = contextData.sensorReadings[0];
     if (latestReading.issueId !== 8) {
       hasAnomaly = true;
       const issue = anomalyIssues.find(i => i.id === latestReading.issueId);
-      anomalyType = issue?.name || 'Unknown';
+      if (issue) {
+        anomalyType = issue.name;
+        anomalySeverity = issue.severity;
+        anomalyComponent = issue.affectedComponent;
+      }
     }
   }
+  
+  // Part-specific information
+  const partInfo = contextData?.part ? 
+    `You're currently looking at the ${contextData.part.name} (ID: ${contextData.part.id}), made of ${contextData.part.material}.` :
+    '';
   
   // Pattern match on common questions
   if (userMessage.includes('vibration') || userMessage.includes('vibrations')) {
     if (hasAnomaly && anomalyType.includes('Vibration')) {
-      return "The vibration readings are currently outside the normal operating range. I've detected excessive vibration that may indicate an issue with the tool alignment or balance. I recommend checking the tool mounting and considering recalibration.";
+      return `${partInfo} You should look specifically at the vibration readings in the sensor panel. I've detected excessive vibration that may indicate an issue with the tool alignment or balance. The ${anomalyComponent} shows concerning vibration patterns. Pay attention to the historical vibration graph in the part details section - notice how the peaks are becoming more pronounced over time.`;
     } else {
-      return "The vibration readings are within normal operating parameters. The servo motor is showing vibration levels between 0.5-2 mm/s RMS, which is optimal for precision machining operations.";
+      return `${partInfo} Based on the current data, vibration readings are within normal operating parameters. The servo motor is showing vibration levels between 0.5-2 mm/s RMS, which is optimal for precision machining operations. However, I'd recommend keeping an eye on the tool vibration readings as they are trending toward the upper limit of normal range.`;
     }
   } else if (userMessage.includes('coolant') || userMessage.includes('cooling')) {
     if (hasAnomaly && (anomalyType.includes('Coolant') || anomalyType.includes('Cooling'))) {
-      return "There appears to be an issue with the coolant system. The coolant level or flow rate is outside normal parameters. I recommend checking the coolant reservoir and pump before continuing operations.";
+      return `${partInfo} You need to immediately check the coolant system. Look at the coolant indicators in the sensor panel - they're highlighted in red. The ${anomalyComponent} is showing abnormal readings. The coolant level or flow rate is significantly outside normal parameters. Check the coolant reservoir and pump before continuing operations, as continued operation could lead to tool damage or poor surface finish.`;
     } else {
-      return "The coolant system is functioning normally. The flow rate is within the expected range of 5-8 L/min, and the reservoir level is adequate for continued operation.";
+      return `${partInfo} The coolant system is functioning normally. The flow rate is within the expected range of 5-8 L/min, and the reservoir level is adequate for continued operation. If you look at the coolant systems tab in the part details section, you'll see consistent performance across recent operations.`;
     }
   } else if (userMessage.includes('tool wear') || userMessage.includes('tool life')) {
     if (hasAnomaly && anomalyType.includes('Tool Wear')) {
-      return "The tool wear indicator is showing that the current tool is approaching the end of its useful life. It's currently at less than 30% remaining life, which means you should plan for a replacement soon to maintain machining quality.";
+      return `${partInfo} Look at the tool wear indicator in the sensor panel - it's highlighted as a concern. The current tool is approaching the end of its useful life at less than 30% remaining. You should plan for a replacement before your next machining operation. Check the historical data in the part details section to see how quickly wear has been progressing.`;
     } else {
-      return "The tool wear indicators show that the current tool has more than 80% of its useful life remaining. It's in good condition for continued operation.";
+      return `${partInfo} The tool wear indicators show that the current tool has more than 80% of its useful life remaining. It's in good condition for continued operation. Based on historical wear patterns with this part, you should expect approximately 20-25 more hours of machining before replacement is recommended.`;
     }
   } else if (userMessage.includes('historical') || userMessage.includes('history') || userMessage.includes('previous')) {
     if (contextData?.part) {
-      return `Based on historical data for ${contextData.part.name} (ID: ${contextData.part.id}), this part has been machined with generally stable parameters. There have been ${contextData.part.issueHistory.filter(id => id !== 8).length} anomalies detected during previous operations, most related to standard operational variations. The last operation completed on ${contextData.part.lastMachined.toLocaleDateString()} with a total operation time of ${contextData.part.operationTime} minutes.`;
+      return `${partInfo} Looking at the historical data for this part, I can see that it has been machined with ${contextData.part.issueHistory.filter(id => id !== 8).length} anomalies detected during previous operations. Pay attention to the charts in the part details section - particularly the ${hasAnomaly ? anomalyComponent.toLowerCase() + " readings" : "vibration patterns"} which show some interesting patterns. The last operation completed on ${contextData.part.lastMachined.toLocaleDateString()} with a total operation time of ${contextData.part.operationTime} minutes.`;
     } else {
-      return "I don't have specific historical data available for this part. To view historical performance, please specify the part ID or name you're interested in.";
+      return "To view historical performance data, please specify the part ID or name you're interested in, or select a part from the Machined Parts tab in the dashboard. Once you select a specific part, I can provide detailed historical analysis of its performance and any patterns of issues.";
     }
   } else {
     // Generic response
     if (hasAnomaly) {
-      return `I've detected an anomaly in the current operation: ${anomalyType}. This may require attention before proceeding with the machining operation. I recommend reviewing the sensor data in the dashboard for more detailed information.`;
+      return `${partInfo} I've detected a ${anomalySeverity} anomaly: ${anomalyType}. You should immediately look at the ${anomalyComponent} readings in the sensor panel - they're highlighted with a warning indicator. This requires attention before proceeding with any machining operation. Check the System Insights tab for my specific recommendations on addressing this issue.`;
     } else {
-      return "All systems are currently operating within normal parameters. The CNC machine is ready for operation. Is there specific information you're looking for about the current setup or historical performance?";
+      return `${partInfo} All systems are currently operating within normal parameters. The CNC machine is ready for operation. If you're planning to work with this part, the historical data shows consistent performance with no significant issues. Is there specific information you're looking for about the current setup or performance characteristics?`;
     }
   }
 }

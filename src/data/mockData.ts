@@ -1,4 +1,3 @@
-
 import { AnomalyIssue, MachinedPart, SensorReading } from "../types";
 
 // Mock anomaly issues
@@ -14,52 +13,34 @@ export const anomalyIssues: AnomalyIssue[] = [
   { id: 8, name: "Normal", description: "All parameters within normal operating ranges", severity: "normal", affectedComponent: "System" }
 ];
 
-// Mock machined parts
+// Mock machined parts - updated to use only gears with the provided images
 export const machinedParts: MachinedPart[] = [
   {
     id: "PT-7843-A",
-    name: "Precision Gear Assembly",
+    name: "Precision Planetary Gear",
     material: "Stainless Steel 316L",
     lastMachined: new Date(2023, 3, 15),
     operationTime: 94.5,
     issueHistory: [8, 8, 8, 2, 8, 8],
-    imageUrl: "/lovable-uploads/d6b2bb20-107c-45e5-beab-f5a4963ba28b.png"
+    imageUrl: "/lovable-uploads/21c36daf-3406-4300-bf5f-150372a9faf5.png"
   },
   {
     id: "PT-6392-B",
-    name: "Turbine Impeller",
+    name: "Helical Drive Gear",
     material: "Titanium Ti-6Al-4V",
     lastMachined: new Date(2023, 4, 22),
     operationTime: 127.3,
     issueHistory: [8, 1, 8, 8, 5, 8],
-    imageUrl: "/lovable-uploads/3d141fcc-942a-45a1-a2c8-12d397cd006c.png"
+    imageUrl: "/lovable-uploads/7f2e1279-e044-44af-825f-1569df74fd13.png"
   },
   {
     id: "PT-9201-C",
-    name: "Hydraulic Valve Housing",
-    material: "Aluminum 7075-T6",
+    name: "Industrial Spur Gear",
+    material: "Hardened Steel 4340",
     lastMachined: new Date(2023, 5, 8),
     operationTime: 68.7,
     issueHistory: [0, 8, 8, 8, 8, 8],
-    imageUrl: "/placeholder.svg"
-  },
-  {
-    id: "PT-5127-D",
-    name: "Transmission Coupling",
-    material: "Alloy Steel 4340",
-    lastMachined: new Date(2023, 5, 17),
-    operationTime: 83.2,
-    issueHistory: [8, 8, 3, 8, 8, 8],
-    imageUrl: "/placeholder.svg"
-  },
-  {
-    id: "PT-3476-E",
-    name: "Medical Implant Component",
-    material: "Titanium Ti-6Al-4V ELI",
-    lastMachined: new Date(2023, 6, 5),
-    operationTime: 105.9,
-    issueHistory: [8, 8, 8, 8, 8, 8],
-    imageUrl: "/placeholder.svg"
+    imageUrl: "/lovable-uploads/da7faec3-22c6-4f60-a358-4cbc8bf5ccaa.png"
   }
 ];
 
