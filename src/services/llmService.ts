@@ -15,30 +15,41 @@ export const initializeLLM = async () => {
     console.log('Initializing LLM...');
     // Check if the FilesetResolver is available
     if (!window.FilesetResolver) {
-      console.warn('FilesetResolver not found');
+      console.error('FilesetResolver not found in window object. Make sure the genai_bundle.js script is properly loaded.');
       return false;
     }
     
-    const genai = await window.FilesetResolver.forGenAiTasks(
-      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-genai@latest/wasm"
-    );
-    
-    console.log('FilesetResolver initialized, creating LLM inference...');
-    
-    llmInference = await window.LlmInference.createFromOptions(genai, {
-      baseOptions: {
-        modelAssetPath: '/assets/gemma3-1b-it-int4.task'
-      },
-      maxTokens: 1000,
-      topK: 40,
-      temperature: 0.8,
-      randomSeed: 101
-    });
-    
-    console.log('LLM initialized successfully');
-    return true;
+    try {
+      console.log('Attempting to initialize FilesetResolver...');
+      const genai = await window.FilesetResolver.forGenAiTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-genai@latest/wasm"
+      );
+      
+      console.log('FilesetResolver initialized, creating LLM inference...');
+      
+      if (!window.LlmInference) {
+        console.error('LlmInference not found in window object.');
+        return false;
+      }
+      
+      llmInference = await window.LlmInference.createFromOptions(genai, {
+        baseOptions: {
+          modelAssetPath: '/assets/gemma3-1b-it-int4.task'
+        },
+        maxTokens: 1000,
+        topK: 40,
+        temperature: 0.8,
+        randomSeed: 101
+      });
+      
+      console.log('LLM initialized successfully');
+      return true;
+    } catch (error) {
+      console.error('Error during LLM initialization:', error);
+      return false;
+    }
   } catch (error) {
-    console.warn('LLM initialization failed:', error);
+    console.error('LLM initialization failed:', error);
     return false;
   }
 };

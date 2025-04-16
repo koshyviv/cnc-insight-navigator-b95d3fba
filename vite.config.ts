@@ -16,6 +16,14 @@ export default defineConfig(({ mode }) => ({
     sourcemap: true,
     // Ensure we generate a clean build
     emptyOutDir: true,
+    // Add rollup options to ensure assets are handled correctly
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+        },
+      },
+    },
   },
   plugins: [
     react(),
@@ -27,4 +35,6 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  // Properly handle asset copying
+  publicDir: 'public',
 }));

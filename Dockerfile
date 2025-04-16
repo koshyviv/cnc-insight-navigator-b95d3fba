@@ -22,6 +22,9 @@ COPY --from=build /app/dist /usr/share/nginx/html
 # Create assets directory and copy model file
 COPY --from=build /app/public/assets /usr/share/nginx/html/assets
 
+# Ensure proper permissions
+RUN chmod -R 755 /usr/share/nginx/html
+
 # Add nginx configuration
 COPY ./nginx.conf /etc/nginx/conf.d/default.conf
 

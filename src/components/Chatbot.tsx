@@ -6,7 +6,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Separator } from "@/components/ui/separator";
 import { Send, AlertTriangle, Loader2 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
-import { getResponseFromLLM, initializeLLM, streamResponseFromLLM } from "@/services/llmService";
+import { initializeLLM, streamResponseFromLLM } from "@/services/llmService";
 import { ChatMessage, ContextualData } from "@/types";
 
 interface ChatbotProps {
