@@ -5,9 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Send, AlertTriangle, Loader2 } from "lucide-react";
-import { ChatMessage, ContextualData } from "@/types";
 import { v4 as uuidv4 } from "uuid";
 import { getResponseFromLLM, initializeLLM, streamResponseFromLLM } from "@/services/llmService";
+import { ChatMessage, ContextualData } from "@/types";
 
 interface ChatbotProps {
   contextData?: ContextualData;
