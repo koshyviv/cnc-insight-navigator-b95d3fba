@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -7,6 +6,7 @@ import { useEffect, useState } from "react";
 import { getPartHistoricalReadings } from "@/data/mockData";
 import { generateInsightsFromSensors, getSensorsFromReading } from "@/utils/sensorUtils";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { recordSystemState } from "@/services/historyService";
 
 interface PartDetailProps {
   part: MachinedPart | null;
@@ -24,6 +24,14 @@ const PartDetail = ({ part, onContextChange }: PartDetailProps) => {
       // Update context data with the part and its readings
       const sensors = readings.length > 0 ? getSensorsFromReading(readings[0]) : [];
       const insights = sensors.length > 0 ? generateInsightsFromSensors(sensors) : [];
+      
+      // Get the latest reading for this part
+      const latestReading = readings.length > 0 ? readings[0] : null;
+      
+      // Record the system state with this part selected
+      if (latestReading) {
+        recordSystemState(latestReading, part);
+      }
       
       onContextChange({
         part,

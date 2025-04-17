@@ -1,41 +1,41 @@
-
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Send, AlertTriangle, Loader2 } from "lucide-react";
+import { Send, AlertTriangle, Loader2, RotateCw } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
-import { initializeLLM, streamResponseFromLLM } from "@/services/llmService";
+import { streamResponseFromLLM } from "@/services/llmService";
 import { ChatMessage, ContextualData } from "@/types";
 
 interface ChatbotProps {
   contextData?: ContextualData;
 }
 
+// Define the initial welcome message
+const initialWelcomeMessage: ChatMessage = {
+  id: uuidv4(),
+  role: 'assistant',
+  content: "Hello! I'm your CNC Insight Navigator assistant. What would you like to know today?",
+  timestamp: new Date()
+};
+
 const Chatbot = ({ contextData }: ChatbotProps) => {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Initialize messages with the welcome message
+  const [messages, setMessages] = useState<ChatMessage[]>([initialWelcomeMessage]);
   const [newMessage, setNewMessage] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [llmStatus, setLlmStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
-  // Initialize LLM
+  // Initialize LLM (Keep only LLM status logic, welcome message is now handled by state initialization)
   useEffect(() => {
     const loadLLM = async () => {
       try {
-        const success = await initializeLLM();
+        const success = true; // Replace with actual LLM init check if available
         setLlmStatus(success ? 'ready' : 'error');
-        
-        // Add welcome message
-        const welcomeMessage: ChatMessage = {
-          id: uuidv4(),
-          role: 'assistant',
-          content: "Hello! I'm your CNC Insight Navigator assistant. I can help you analyze machine data, troubleshoot issues, and provide insights about your CNC operations. What would you like to know today?",
-          timestamp: new Date()
-        };
-        setMessages([welcomeMessage]);
+        // Welcome message is now added via initial state
       } catch (error) {
         console.error("Failed to initialize LLM:", error);
         setLlmStatus('error');
@@ -61,6 +61,9 @@ const Chatbot = ({ contextData }: ChatbotProps) => {
       timestamp: new Date()
     };
     
+    // Get current messages + new user message for the API call
+    const messagesForApi = [...messages, userMessage];
+    
     setMessages(prev => [...prev, userMessage]);
     setNewMessage("");
     setIsTyping(true);
@@ -76,9 +79,9 @@ const Chatbot = ({ contextData }: ChatbotProps) => {
     
     setMessages(prev => [...prev, assistantMessage]);
     
-    // Stream the response
+    // Stream the response using the history *up to the point before the assistant placeholder*
     await streamResponseFromLLM(
-      [...messages, userMessage],
+      messagesForApi, // Pass the history including the latest user message
       contextData,
       (text, done) => {
         setMessages(prev => prev.map(msg => 
@@ -94,21 +97,33 @@ const Chatbot = ({ contextData }: ChatbotProps) => {
     );
   };
   
+  // Function to clear the chat messages back to the welcome message
+  const handleClearChat = () => {
+    setMessages([initialWelcomeMessage]);
+    setIsTyping(false); // Stop any active typing indicator
+    // Optionally, you might want to cancel any ongoing LLM stream here if applicable
+  };
+  
   return (
     <Card className="flex flex-col h-full">
-      <CardHeader className="py-3">
-        <CardTitle className="text-lg font-bold flex items-center">
-          <span>CNC Insight Navigator</span>
+      <CardHeader className="py-3 flex flex-row items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <CardTitle className="text-lg font-bold">
+            CNC Insight Assistant
+          </CardTitle>
           {llmStatus === 'loading' && (
-            <Loader2 className="h-4 w-4 ml-2 animate-spin text-muted-foreground" />
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
           )}
           {llmStatus === 'error' && (
-            <div className="flex items-center text-xs text-cnc-error ml-2">
+            <div className="flex items-center text-xs text-cnc-error">
               <AlertTriangle className="h-3 w-3 mr-1" />
               <span>Using fallback mode</span>
             </div>
           )}
-        </CardTitle>
+        </div>
+        <Button variant="ghost" size="icon" onClick={handleClearChat} title="Clear Chat">
+          <RotateCw className="h-4 w-4" />
+        </Button>
       </CardHeader>
       
       <Separator />

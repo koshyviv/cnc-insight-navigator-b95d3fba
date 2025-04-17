@@ -17,3 +17,26 @@ services:
         max-size: "10m"
         max-file: "5"
     restart: unless-stopped
+    depends_on:
+      - ollama
+
+  ollama:
+    image: docker.io/ollama/ollama:latest
+    # ports:
+    #   # Map Ollama's default port 11434 to 7869 on the host
+    #   - "7869:11434"
+    volumes:
+      # Mount a host directory to persist Ollama models
+      - ./ollama_data:/root/.ollama
+      # Mount the custom entrypoint script
+      - ./ollama-entrypoint.sh:/entrypoint.sh
+    container_name: ollama
+    # pull_policy: always # Pull base image only if not present locally
+    tty: true
+    # restart: always # Consider uncommenting if you want it to always restart
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h
+      - OLLAMA_HOST=0.0.0.0
+    # Override the entrypoint to use our custom script
+    entrypoint: /entrypoint.sh
+    # Remove the previous command as the script handles startup

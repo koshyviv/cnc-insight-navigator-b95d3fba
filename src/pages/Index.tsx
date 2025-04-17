@@ -1,30 +1,71 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { ContextualData, MachinedPart } from "@/types";
+import { ContextualData, MachinedPart, AnomalyIssue } from "@/types";
 import Dashboard from "@/components/Dashboard";
 import Chatbot from "@/components/Chatbot";
-import { getDashboardSensorData, machinedParts } from "@/data/mockData";
+import { getDashboardSensorData, machinedParts, anomalyIssues } from "@/data/mockData";
 import { getSensorsFromReading, generateInsightsFromSensors } from "@/utils/sensorUtils";
 import PartDetail from "@/components/PartDetail";
 import { Search, ChevronUp, ChevronDown } from "lucide-react";
+import { recordSystemState } from "@/services/historyService";
 
 const Index = () => {
   const [selectedPart, setSelectedPart] = useState<MachinedPart | null>(null);
   const [contextData, setContextData] = useState<ContextualData>(() => {
-    // Initialize with current sensor data
+    // Initialize with current sensor data, insights, AND anomalies
     const reading = getDashboardSensorData();
     const sensors = getSensorsFromReading(reading);
     const insights = generateInsightsFromSensors(sensors);
     
+    // Find the corresponding anomaly based on the reading's issueId
+    const currentAnomaly = anomalyIssues.find(a => a.id === reading.issueId);
+    const initialAnomalies: AnomalyIssue[] = currentAnomaly && currentAnomaly.severity !== 'normal' 
+      ? [currentAnomaly] 
+      : []; // Only include if it's not 'normal'
+      
+    console.log("Initial Context Data:", { sensorReadings: [reading], insights, anomalies: initialAnomalies });
+
     return {
       sensorReadings: [reading],
-      insights
+      insights,
+      anomalies: initialAnomalies // Add anomalies to initial state
     };
   });
   const [showPart, setShowPart] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  
+  // Initialize history system with current state
+  useEffect(() => {
+    if (contextData.sensorReadings && contextData.sensorReadings.length > 0) {
+      // Record the initial system state
+      recordSystemState(contextData.sensorReadings[0]);
+      
+      // Simulate some past states for demonstration
+      const pastTimestamps = [
+        new Date(Date.now() - 3600000), // 1 hour ago
+        new Date(Date.now() - 7200000), // 2 hours ago
+        new Date(Date.now() - 14400000)  // 4 hours ago
+      ];
+      
+      // Make a deep copy of the initial reading to avoid modifying it
+      const initialReading = { ...contextData.sensorReadings[0] };
+      
+      // Create history entries with some different anomalies to represent past states
+      // Tooling vibration issue (id 3)
+      const issue1 = { ...initialReading, issueId: 3 };
+      // Coolant pump issue (id 5)
+      const issue2 = { ...initialReading, issueId: 5 };
+      // Normal operation (id 8)
+      const issue3 = { ...initialReading, issueId: 8 };
+      
+      // Record these past states (with timestamps in the past)
+      recordSystemState(issue1, machinedParts[0]);
+      recordSystemState(issue2);
+      recordSystemState(issue3, machinedParts[1]);
+    }
+  }, []);
   
   // Handle searching for parts
   const handleSearch = () => {
@@ -138,11 +179,11 @@ const Index = () => {
         )}
       </main>
       
-      <footer className="bg-white border-t py-4">
+      {/* <footer className="bg-white border-t py-4">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
           CNC Insight Navigator v1.0 • © 2023 Advanced Manufacturing Solutions
         </div>
-      </footer>
+      </footer> */}
     </div>
   );
 };

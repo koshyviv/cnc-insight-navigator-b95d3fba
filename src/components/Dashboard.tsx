@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { getDashboardSensorData, machinedParts } from "../data/mockData";
 import { SensorReading } from "../types";
@@ -9,6 +8,7 @@ import MachinedPartList from "./MachinedPartList";
 import { getSensorsFromReading, generateInsightsFromSensors, getMostCriticalIssue } from "@/utils/sensorUtils";
 import MachineStatus from "./MachineStatus";
 import { AlertTriangle, Check } from "lucide-react";
+import { recordSystemState } from "@/services/historyService";
 
 const Dashboard = () => {
   const [sensorData, setSensorData] = useState<SensorReading | null>(null);
@@ -19,6 +19,9 @@ const Dashboard = () => {
     const fetchData = () => {
       const data = getDashboardSensorData();
       setSensorData(data);
+      
+      // Record this system state in our history
+      recordSystemState(data);
     };
 
     fetchData();
